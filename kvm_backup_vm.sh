@@ -19,27 +19,22 @@ if [ -z "$1" ]
   else
 	  # Проверка существования виртуальной машины
 	  if virsh dumpxml $BACKUP_VM > /dev/null 2>&1 ; then
-			echo "$BACKUP_VM is exist"
+			echo "Log: $BACKUP_VM is exist"
 		else
-			echo "$BACKUP_VM not found!"
+			echo "Log: $BACKUP_VM not found!"
 			exit 1
 	  fi
 fi
 
-#virsh dumpxml lsed > /dev/null 2>&1
-#if [ $? -eq 0 ]; then
-#    echo OK
-#else
-#    echo FAIL
-#fi
-
 echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start script."
-echo "......................................................."
+echo "==========================================================="
 echo "Выполняется архивирование виртуальной машины $BACKUP_VM"
-echo "......................................................."
+echo "==========================================================="
+
 #------------------------------------------
 # 0 - Проверка каталогов
 #------------------------------------------
+
 # Если каталога для бэкапа нет, то создаем
 [ -d $FOLDER_Backup ] || sudo mkdir $FOLDER_Backup
 
@@ -73,9 +68,9 @@ echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start snapshot."
 echo "Create snapshot to $FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT"
 virsh snapshot-create-as --domain $BACKUP_VM backup-snapshot -diskspec $DISK,file=$FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT --disk-only --atomic --quiesce --no-metadata
 if [ $? -eq 0 ]; then
-    echo "Snapshot is created"
+    echo "Log: Snapshot is created"
 else
-    echo "Error creating snapshot!"
+    echo "Log: Error creating snapshot!"
 	exit 1
 fi
 echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # End snapshot."  
@@ -99,10 +94,11 @@ echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start merge."
 #Когда выполнение бэкапа завершено, объединим снапшот с основным файлом:
 virsh blockcommit $BACKUP_VM $DISK --active --verbose --pivot
 if [ $? -eq 0 ]; then
-    echo "Merge OK"
+    echo "Log: Merge OK"
+	echo "Log: The snapshot will be deleted!"
 	rm $FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT
 else
-    echo "Merge Error!"
+    echo "Log: Merge Error!"
 	exit 1
 fi
 echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # End merge."  
@@ -111,11 +107,11 @@ echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # End merge."
 # 5 - Создание резервной копии конфигурации
 #------------------------------------------
 
-#Для полноты картины забэкапим еще и настройки виртуалки:
+echo "......................................................."
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start backup settings."  
 echo "Backup VM settings to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG"
 virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG
-
-echo "Архивирование виртуальной машины $BACKUP_VM завершено!"
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # End backup settings." 
 echo "......................................................"
 
 #------------------------------------------
