@@ -1,5 +1,5 @@
 #!/bin/bash
-#Создание резервной копии виртуальной машины
+#Создание резервной копии виртуальной машины KVM
 
 # Параметры бэкапа:
 TIMESTAMP=$( date +%d.%m.%Y_%H:%M )			# Создание временной метки
@@ -26,24 +26,32 @@ if [ -z "$1" ]
 	  fi
 fi
 
-#virsh dumpxml lse1d > /dev/null 2>&1
+#virsh dumpxml lsed > /dev/null 2>&1
 #if [ $? -eq 0 ]; then
 #    echo OK
 #else
 #    echo FAIL
 #fi
 
-
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start script."
+echo "......................................................."
 echo "Выполняется архивирование виртуальной машины $BACKUP_VM"
 echo "......................................................."
+#------------------------------------------
+# 0 - Проверка каталогов
+#------------------------------------------
 # Если каталога для бэкапа нет, то создаем
 [ -d $FOLDER_Backup ] || sudo mkdir $FOLDER_Backup
 
 # Если каталога для бэкапа машины нет, то создаем
 [ -d $FOLDER_Backup/$BACKUP_VM ] || sudo mkdir $FOLDER_Backup/$BACKUP_VM
 
+#------------------------------------------
+# 1 - Инициализация
+#------------------------------------------
+
 DISK=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $1}'`			# Тип диска (vda или hda)
-DISK_PATH=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $2}'`		# Путь (VM_STORAGE/win2k12r2.qcow2)
+DISK_PATH=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $2}'`		# Путь (VM_STORAGE/win2k12.qcow2)
 DISK_SNAPSHOT=$BACKUP_VM-snapshot.qcow2
 
 FILE=`basename $DISK_PATH`
@@ -51,30 +59,53 @@ filename="${FILE%.*}"
 extension="${FILE##*.}"
 ARHIV="${filename}.(${TIMESTAMP}).${extension}.gz"
 ARHIV_CFG="${BACKUP_VM}.(${TIMESTAMP}).xml"
+ARHIV_CFG_BEFORE="${BACKUP_VM}.(${TIMESTAMP})_Before.xml"					# Резервация конфига на случай сбоя архивирования
 
 #------------------------------------------
 # 2 - Создание снапшота
 #------------------------------------------
 
-echo "create snapshot $BACKUP_VM to $FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT"
+echo "......................................................."
+echo "Reserved config VM to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE"
+virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE
+echo "......................................................."
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start snapshot."  
+echo "Create snapshot to $FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT"
 virsh snapshot-create-as --domain $BACKUP_VM backup-snapshot -diskspec $DISK,file=$FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT --disk-only --atomic --quiesce --no-metadata
+if [ $? -eq 0 ]; then
+    echo "Snapshot is created"
+else
+    echo "Error creating snapshot!"
+	exit 1
+fi
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # End snapshot."  
 
 #------------------------------------------
 # 3 - Создание резервной копии машины
 #------------------------------------------
 
+echo "......................................................."
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start backup."  
 echo "Backup VM disk to $FOLDER_Backup/$BACKUP_VM/$ARHIV"
 pigz -c $DISK_PATH > $FOLDER_Backup/$BACKUP_VM/$ARHIV
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # End backup."  
 
 #------------------------------------------
 # 4 - Объединение снапшота с рабочим диском
 #------------------------------------------
 
+echo "......................................................."
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start merge."  
 #Когда выполнение бэкапа завершено, объединим снапшот с основным файлом:
 virsh blockcommit $BACKUP_VM $DISK --active --verbose --pivot
-
-#После этого файл снэпшота можно удалить:
-rm $FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT
+if [ $? -eq 0 ]; then
+    echo "Merge OK"
+	rm $FOLDER_Backup/$BACKUP_VM/$DISK_SNAPSHOT
+else
+    echo "Merge Error!"
+	exit 1
+fi
+echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # End merge."  
 
 #------------------------------------------
 # 5 - Создание резервной копии конфигурации
