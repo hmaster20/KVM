@@ -3,7 +3,7 @@
 
 # Параметры бэкапа:
 TIMESTAMP=$( date +%d.%m.%Y_%H:%M )			# Создание временной метки
-DUMP_NUM=7									# Число бэкапов
+DUMP_NUM=21									# Число дней хранения бэкапов
 FOLDER_Backup="/mnt/md0/backup-vm"			# Расположение бэкапов
 BACKUP_VM=$1								# Имя виртуальной машины
 
@@ -23,9 +23,9 @@ if [ -z "$1" ]
   else
 	  # Проверка существования виртуальной машины
 	  if virsh dumpxml $BACKUP_VM > /dev/null 2>&1 ; then
-			echo "Log: $BACKUP_VM is exist"
+			echo "Log: Виртуальная машина $BACKUP_VM - найдена."
 		else
-			echo "Log: $BACKUP_VM not found!"
+			echo "Log: Виртуальная машина $BACKUP_VM не существует!"
 			exit 1
 	  fi
 fi
@@ -52,16 +52,28 @@ SNAPSHOT_PATH="$FOLDER_Backup/$BACKUP_VM/$SNAPSHOT_FILE"
 FILE=`basename $DISK_PATH`
 filename="${FILE%.*}"
 extension="${FILE##*.}"
-ARHIV="${filename}.(${TIMESTAMP}).${extension}.gz"
-ARHIV_CFG="${BACKUP_VM}.(${TIMESTAMP}).xml"
-ARHIV_CFG_BEFORE="${BACKUP_VM}.(${TIMESTAMP})_Before.xml"					# Резервация конфига на случай сбоя архивирования
+TYPE="tar.gz"
+ARHIV="${filename}_${TIMESTAMP}_${extension}.${TYPE}"
+ARHIV_CFG="${BACKUP_VM}_${TIMESTAMP}.xml"
+ARHIV_CFG_BEFORE="${BACKUP_VM}_${TIMESTAMP}_Before.xml"					# Резервация конфига на случай сбоя архивирования
 ARHIV_PATH="$FOLDER_Backup/$BACKUP_VM/$ARHIV"
 
 VM_STATE=`virsh domstate $BACKUP_VM` 
 
+
 #------------------------------------------
 # --- Функиции
 #------------------------------------------
+
+# Функция - Проверка наличия снапшота
+snapshot_check()
+{
+  # Проверка наличия снимка
+  if [ -f "$SNAPSHOT_PATH" ]; then
+    echo "Log: Найден старый снапшот. Выболняется объединение."  
+	snapshot_merge
+  fi
+}
 
 # Функция - Создание снапшота
 snapshot_create()
@@ -101,6 +113,7 @@ echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start script."
 # 1 - Создание снапшота
 #------------------------------------------
 
+snapshot_check
 echo "......................................................."
 echo "Reserved config VM to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE"
 virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE
@@ -118,14 +131,18 @@ fi
 #------------------------------------------
 
 echo "......................................................."
-echo "Backup VM disk to $ARHIV_PATH"
-pigz -c $DISK_PATH > $ARHIV_PATH
+echo "Создание резервной копии машины в $ARHIV_PATH"
+#pigz -c $DISK_PATH > $ARHIV_PATH
+#tar: Removing leading `/' from member names
+#-P, --absolute-names       не удалять начальные «/» из имён файлов
+tar czvfP $ARHIV_PATH $DISK_PATH
+
   # Проверка наличия созданного бэкапа
   if [ -f "$ARHIV_PATH" ]; then
-    echo "Backup SUCCESSFUL!"    
+    echo "Резервное копирвоание успешно завершено!"    
     SUCCESS=1
   else
-    echo "Backup Error!!"
+    echo "Произошла ошибка при выполнении резервного копирования!!"
 	exit 1;
   fi
 
@@ -133,10 +150,7 @@ pigz -c $DISK_PATH > $ARHIV_PATH
 # 3 - Объединение снапшота с рабочим диском
 #------------------------------------------
 
-  # Проверка наличия снимка
-  if [ -f "$SNAPSHOT_PATH" ]; then
-	snapshot_merge
-  fi
+snapshot_check
 
 #------------------------------------------
 # 4 - Создание резервной копии конфигурации
