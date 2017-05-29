@@ -70,7 +70,7 @@ snapshot_check()
 {
   # Проверка наличия снимка
   if [ -f "$SNAPSHOT_PATH" ]; then
-    echo "Log: Найден старый снапшот. Выболняется объединение."  
+    echo "Log: Найден снапшот. Выболняется объединение."  
 	snapshot_merge
   fi
 }
@@ -82,9 +82,9 @@ snapshot_create()
   echo "Create snapshot to $SNAPSHOT_PATH"
   virsh snapshot-create-as --domain $BACKUP_VM backup-snapshot -diskspec $DISK,file=$SNAPSHOT_PATH --disk-only --atomic --quiesce --no-metadata
   if [ $? -eq 0 ]; then
-      echo "Log: Snapshot is created"
+      echo "Log: снапшот создан."
   else
-      echo "Log: Error creating snapshot!"
+      echo "Log: ошибка создания снапшота!"
 	  exit 1
   fi
 }
@@ -130,12 +130,18 @@ fi
 # 2 - Создание резервной копии машины
 #------------------------------------------
 
+
+DISK_PATH2=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $2}'`		# Путь (VM_STORAGE/win2k12.qcow2)
+FILE2=`basename $DISK_PATH2`
+ARHIV_PATH2="$FOLDER_Backup/$BACKUP_VM/${FILE2%.*}_${TIMESTAMP}_${FILE2##*.}.tar.gz"
+
+
 echo "......................................................."
 echo "Создание резервной копии машины в $ARHIV_PATH"
 #pigz -c $DISK_PATH > $ARHIV_PATH
 #tar: Removing leading `/' from member names
 #-P, --absolute-names       не удалять начальные «/» из имён файлов
-tar czvfP $ARHIV_PATH $DISK_PATH
+tar czvfP $ARHIV_PATH2 $DISK_PATH
 
   # Проверка наличия созданного бэкапа
   if [ -f "$ARHIV_PATH" ]; then
