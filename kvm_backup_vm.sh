@@ -144,7 +144,7 @@ echo "Создание резервной копии машины в $ARHIV_PATH
 tar czvfP $ARHIV_PATH2 $DISK_PATH
 
   # Проверка наличия созданного бэкапа
-  if [ -f "$ARHIV_PATH" ]; then
+  if [ -f "$ARHIV_PATH2" ]; then
     echo "Резервное копирвоание успешно завершено!"    
     SUCCESS=1
   else
