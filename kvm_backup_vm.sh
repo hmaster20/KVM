@@ -6,6 +6,7 @@ TIMESTAMP=$( date +%d.%m.%Y_%H:%M )			# Создание временной ме
 DUMP_NUM=21									# Число дней хранения бэкапов
 FOLDER_Backup="/mnt/md0/backup-vm"			# Расположение бэкапов
 BACKUP_VM=$1								# Имя виртуальной машины
+SNAPSHOT=false								# По умолчанию снапшота быть не должно 
 
 #------------------------------------------
 # --- Проверка наличия параметра запуска
@@ -70,7 +71,8 @@ snapshot_check()
 {
   # Проверка наличия снимка
   if [ -f "$SNAPSHOT_PATH" ]; then
-    echo "Log: Найден снапшот. Выболняется объединение."  
+    echo "Log: Найден снапшот. Выболняется объединение." 
+	SNAPSHOT=true	
 	snapshot_merge
   fi
 }
@@ -115,7 +117,7 @@ echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start script."
 
 snapshot_check
 echo "......................................................."
-echo "Reserved config VM to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE"
+echo "Log: Reserved config VM to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE"
 virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE
 
 #if [ $(virsh domstate $BACKUP_VM | grep -c "shut off") -eq 0 ]; then
@@ -123,7 +125,7 @@ virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE
 if [ $(echo $VM_STATE | grep -cE "(shut off|paused)") -eq 0 ]; then
    snapshot_create
 else
-	echo "Машина в состоянии $VM_STATE. Создание снимка не требуется"   
+	echo "Log: Машина в состоянии $VM_STATE. Создание снимка не требуется"   
 fi
 
 #------------------------------------------
@@ -131,26 +133,37 @@ fi
 #------------------------------------------
 
 
-DISK_PATH2=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $2}'`		# Путь (VM_STORAGE/win2k12.qcow2)
+DISK_PATH2=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $2}'`
 FILE2=`basename $DISK_PATH2`
 ARHIV_PATH2="$FOLDER_Backup/$BACKUP_VM/${FILE2%.*}_${TIMESTAMP}_${FILE2##*.}.tar.gz"
 
 
-echo "......................................................."
-echo "Создание резервной копии машины в $ARHIV_PATH"
-#pigz -c $DISK_PATH > $ARHIV_PATH
-#tar: Removing leading `/' from member names
-#-P, --absolute-names       не удалять начальные «/» из имён файлов
-tar czvfP $ARHIV_PATH2 $DISK_PATH
-
-  # Проверка наличия созданного бэкапа
-  if [ -f "$ARHIV_PATH2" ]; then
-    echo "Резервное копирвоание успешно завершено!"    
-    SUCCESS=1
-  else
-    echo "Произошла ошибка при выполнении резервного копирования!!"
-	exit 1;
-  fi
+if	$SNAPSHOT; then
+	echo "......................................................."
+	echo "Log: Создание резервной копии машины в $ARHIV_PATH2"
+	tar czvfP $ARHIV_PATH2 $DISK_PATH
+		# Проверка наличия созданного бэкапа
+		if [ -f "$ARHIV_PATH2" ]; then
+			echo "Log: Резервное копирвоание успешно завершено!"    
+			SUCCESS=1
+		else
+			echo "Log: Произошла ошибка при выполнении резервного копирования!!"
+			exit 1;
+		fi
+else
+	echo "......................................................."
+	echo "Создание резервной копии машины в $ARHIV_PATH"
+	tar czvfP $ARHIV_PATH $DISK_PATH
+		# Проверка наличия созданного бэкапа
+		if [ -f "$ARHIV_PATH" ]; then
+			echo "Log: Резервное копирвоание успешно завершено!"    
+			SUCCESS=1
+		else
+			echo "Log: Произошла ошибка при выполнении резервного копирования!!"
+			exit 1;
+		fi
+fi  
+  
 
 #------------------------------------------
 # 3 - Объединение снапшота с рабочим диском
@@ -163,7 +176,7 @@ snapshot_check
 #------------------------------------------
 
 echo "......................................................."
-echo "Backup VM settings to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG"
+echo "Log: Backup VM settings to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG"
 virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG
 echo "......................................................"
 
