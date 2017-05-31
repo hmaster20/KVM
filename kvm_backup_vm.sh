@@ -2,7 +2,7 @@
 #Создание резервной копии виртуальной машины KVM
 
 # Параметры бэкапа:
-TIMESTAMP=$( date +%d.%m.%Y_%H:%M )			# Создание временной метки
+TIMESTAMP=$( date +%d.%m.%Y_%H.%M )			# Создание временной метки
 DUMP_NUM=21									# Число дней хранения бэкапов
 FOLDER_Backup="/mnt/md0/backup-vm"			# Расположение бэкапов
 BACKUP_VM=$1								# Имя виртуальной машины
@@ -54,7 +54,8 @@ FILE=`basename $DISK_PATH`
 filename="${FILE%.*}"
 extension="${FILE##*.}"
 TYPE="tar.gz"
-ARHIV="${filename}_${TIMESTAMP}_${extension}.${TYPE}"
+#ARHIV="${filename}_${TIMESTAMP}_${extension}.${TYPE}"
+ARHIV="${filename}_${TIMESTAMP}.${TYPE}"
 ARHIV_CFG="${BACKUP_VM}_${TIMESTAMP}.xml"
 ARHIV_CFG_BEFORE="${BACKUP_VM}_${TIMESTAMP}_Before.xml"					# Резервация конфига на случай сбоя архивирования
 ARHIV_PATH="$FOLDER_Backup/$BACKUP_VM/$ARHIV"
@@ -81,7 +82,7 @@ snapshot_check()
 snapshot_create()
 {
   echo "......................................................."
-  echo "Create snapshot to $SNAPSHOT_PATH"
+  echo "Создание снапшота в $SNAPSHOT_PATH"
   virsh snapshot-create-as --domain $BACKUP_VM backup-snapshot -diskspec $DISK,file=$SNAPSHOT_PATH --disk-only --atomic --quiesce --no-metadata
   if [ $? -eq 0 ]; then
       echo "Log: снапшот создан."
@@ -98,7 +99,7 @@ snapshot_merge()
   virsh blockcommit $BACKUP_VM $DISK --active --verbose --pivot
   if [ $? -eq 0 ]; then
       echo "Log: Merge OK"
-	  echo "Log: The snapshot will be deleted!"
+	  echo "Log: Снапшот будет удален!"
 	  rm $SNAPSHOT_PATH
   else
       echo "Log: Merge Error!"
@@ -117,7 +118,7 @@ echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # Start script."
 
 snapshot_check
 echo "......................................................."
-echo "Log: Reserved config VM to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE"
+echo "Log: Сделана резервная копия настроек машины в файл $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE"
 virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG_BEFORE
 
 #if [ $(virsh domstate $BACKUP_VM | grep -c "shut off") -eq 0 ]; then
@@ -132,38 +133,34 @@ fi
 # 2 - Создание резервной копии машины
 #------------------------------------------
 
-
-DISK_PATH2=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $2}'`
-FILE2=`basename $DISK_PATH2`
-ARHIV_PATH2="$FOLDER_Backup/$BACKUP_VM/${FILE2%.*}_${TIMESTAMP}_${FILE2##*.}.tar.gz"
-
+ARHIV_FULL_PATH=""
+DISK_FULL_PATH=""
 
 if	$SNAPSHOT; then
-	echo "......................................................."
-	echo "Log: Создание резервной копии машины в $ARHIV_PATH2"
-	tar czvfP $ARHIV_PATH2 $DISK_PATH
-		# Проверка наличия созданного бэкапа
-		if [ -f "$ARHIV_PATH2" ]; then
-			echo "Log: Резервное копирвоание успешно завершено!"    
-			SUCCESS=1
-		else
-			echo "Log: Произошла ошибка при выполнении резервного копирования!!"
-			exit 1;
-		fi
+	DISK_PATH2=`virsh domblklist $BACKUP_VM | grep qcow2 | awk '{print $2}'`
+	FILE2=`basename $DISK_PATH2`
+	ARHIV_PATH2="$FOLDER_Backup/$BACKUP_VM/${FILE2%.*}_${TIMESTAMP}.tar.gz"	
+	ARHIV_FULL_PATH=$ARHIV_PATH2
+	DISK_FULL_PATH=$DISK_PATH2
 else
-	echo "......................................................."
-	echo "Создание резервной копии машины в $ARHIV_PATH"
-	tar czvfP $ARHIV_PATH $DISK_PATH
-		# Проверка наличия созданного бэкапа
-		if [ -f "$ARHIV_PATH" ]; then
-			echo "Log: Резервное копирвоание успешно завершено!"    
-			SUCCESS=1
-		else
-			echo "Log: Произошла ошибка при выполнении резервного копирования!!"
-			exit 1;
-		fi
+	ARHIV_FULL_PATH=$ARHIV_PATH
+	DISK_FULL_PATH=$DISK_PATH
+fi 
+
+
+echo "......................................................."
+echo "Создание резервной копии диска $DISK_FULL_PATH в $ARHIV_FULL_PATH"
+#tar czvfP $ARHIV_FULL_PATH $DISK_FULL_PATH
+tar czfP $ARHIV_FULL_PATH $DISK_FULL_PATH
+#pigz -c $DISK_FULL_PATH > $ARHIV_FULL_PATH
+
+if [ -f "$ARHIV_FULL_PATH" ]; then
+	echo "Log: Резервное копирвоание успешно завершено!"    
+	SUCCESS=1
+else
+	echo "Log: Произошла ошибка при выполнении резервного копирования!!"
+	exit 1;
 fi  
-  
 
 #------------------------------------------
 # 3 - Объединение снапшота с рабочим диском
@@ -176,7 +173,7 @@ snapshot_check
 #------------------------------------------
 
 echo "......................................................."
-echo "Log: Backup VM settings to $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG"
+echo "Log: Сделана резервная копия настроек машины в файл $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG"
 virsh dumpxml $BACKUP_VM > $FOLDER_Backup/$BACKUP_VM/$ARHIV_CFG
 echo "......................................................"
 
@@ -191,3 +188,6 @@ echo "......................................................"
   fi
 
 echo "$(date +%d.%m.%Y) ($(date +%H.%M:%S)) # The script is completed."
+echo "Для распаковки в каталог, выполните команду, например:"
+echo "tar -C /mnt/md0/backup-vm/ -xzf $ARHIV_FULL_PATH"
+echo "......................................................."
